@@ -133,10 +133,11 @@ class Trainer(object):
                 lr_schedule.step()
 
     def _save_checkpoint(self, ep):
-        def _del_checkpoint(trainer, label, ep_num):
-            for dir_name in os.listdir(os.path.join(trainer.config.out_dir, 'checkpoint')):
-                if dir_name.startswith(label) and not dir_name.startswith(f'{label}_epoch_{ep_num}'):
-                    shutil.rmtree(os.path.join(trainer.config.out_dir, 'checkpoint', dir_name))
+        def _del_checkpoint(trainer: Trainer, label, ep_num):
+            if trainer.acc.is_local_main_process:
+                for dir_name in os.listdir(os.path.join(trainer.config.out_dir, 'checkpoint')):
+                    if dir_name.startswith(label) and not dir_name.startswith(f'{label}_epoch_{ep_num}'):
+                        shutil.rmtree(os.path.join(trainer.config.out_dir, 'checkpoint', dir_name))
         if ep % self.config.save_interval == 0:
             self.acc.save_state(os.path.join(self.config.out_dir, 'checkpoint', f'epoch_{ep}'))
         if self.config.save_last:
@@ -228,6 +229,12 @@ class Trainer(object):
     def device(self):
         return self.acc.device
 
+    def is_local_main_process(self):
+        return self.acc.is_local_main_process
+
+    def is_main_process(self):
+        return self.acc.is_main_process
+
     def print(self, txt):
         warn(txt, acc=self.acc)
 
@@ -282,8 +289,8 @@ class Trainer(object):
                         loss = val_step(self, bat, bat_idx, self.val_global_step)
                         self.val_global_step += 1
                     self._update_tqdm_state(tqdm_loader, ep, loss)
-            if self.acc.is_local_main_process:
-                self._schedule_step()
+            # if self.acc.is_local_main_process:
+            self._schedule_step()
 
             if self.config.auto_gather_record:
                 self.records = self.acc.gather(self.records)
