@@ -309,6 +309,7 @@ class Trainer(object):
     # on_test_end(trainer) -> None
     def test(self, test_step, on_test_end=None):
         self.test_global_step = 0
+        self._eval_state()
         tqdm_loader = tqdm(self.test_dataloader, total=len(self.test_dataloader), disable=not self.acc.is_local_main_process)
         for bat_idx, bat in enumerate(tqdm_loader):
             with torch.no_grad():
