@@ -189,6 +189,9 @@ class Trainer(object):
     def get_raw_models(self):
         return [self.acc.unwrap_model(model) for model in self.model_list]
 
+    def set_component(self, component):
+        self.set_components([component])
+
     def set_components(self, component_list):
         assert isinstance(component_list, list)
         self.component_list = component_list
@@ -221,6 +224,9 @@ class Trainer(object):
 
     def backward(self, loss):
         self.acc.backward(loss)
+
+    def device(self):
+        return self.acc.device
 
     def print(self, txt):
         warn(txt, acc=self.acc)
