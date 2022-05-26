@@ -29,6 +29,7 @@ class TrainerConfig(object):
                  save_last=True,
                  seed=0,
                  auto_optimize=True,
+                 auto_schedule=True,
                  auto_free=False,
                  # auto_gather_record=True,  # 一次变量重建（清空）后，只能调用一次gather，不然会卡死
                  # auto_clear_record=True,
@@ -49,6 +50,7 @@ class TrainerConfig(object):
         self.save_last = save_last
         self.seed = seed
         self.auto_optimize = auto_optimize
+        self.auto_schedule = auto_schedule
         self.auto_free = auto_free
         self.auto_gather_record = True
         self.auto_clear_record = True
@@ -290,7 +292,8 @@ class Trainer(object):
                         self.val_global_step += 1
                     self._update_tqdm_state(tqdm_loader, ep, loss)
             # if self.acc.is_local_main_process:
-            self._schedule_step()
+            if self.config.auto_schedule:
+                self._schedule_step()
 
             if self.config.auto_gather_record:
                 self.records = self.acc.gather(self.records)
