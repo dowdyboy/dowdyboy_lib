@@ -27,7 +27,7 @@ class TrainerConfig(object):
                  save_best_type='min',
                  save_best_rec='val_loss',
                  save_last=True,
-                 seed=0,
+                 seed=1024,
                  auto_optimize=True,
                  auto_schedule=True,
                  auto_free=False,
@@ -35,6 +35,9 @@ class TrainerConfig(object):
                  # auto_clear_record=True,
                  find_unused_parameters=False,
                  ):
+        assert save_best_type in ['min', 'max']
+        assert mixed_precision in ['no', 'fp16', 'bf16']
+        assert log_with in ['all', 'tensorboard', 'wandb', 'comet_ml']
         self.name = name
         self.epoch = epoch
         self.out_dir = out_dir
@@ -44,7 +47,6 @@ class TrainerConfig(object):
         self.enable_save_checkpoint = enable_save_checkpoint
         self.save_interval = save_interval
         self.save_best = save_best
-        assert save_best_type in ['min', 'max']
         self.save_best_type = save_best_type
         self.save_best_rec = save_best_rec
         self.save_last = save_last
@@ -241,6 +243,7 @@ class Trainer(object):
         warn(txt, acc=self.acc)
 
     def log(self, value_dict, step=None):
+        assert isinstance(value_dict, dict)
         self.acc.log(value_dict, step)
 
     def set_records(self, value_dict):
