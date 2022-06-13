@@ -168,7 +168,7 @@ class Trainer(object):
         )
         self.tqdm_state_dict.clear()
 
-    # func(trainer) -> best_rec
+    # func(trainer: Trainer) -> best_rec
     def set_save_best_calc_func(self, func):
         self.save_best_calc_func = func
 
@@ -230,6 +230,16 @@ class Trainer(object):
     def backward(self, loss):
         self.acc.backward(loss)
 
+    def zero_grad(self, optimizer):
+        optimizer.zero_grad()
+
+    def step(self, optimizer=None, lr_scheduler=None):
+        assert optimizer is not None or lr_scheduler is not None
+        if optimizer is not None:
+            optimizer.step()
+        if lr_scheduler is not None:
+            lr_scheduler.step()
+
     def device(self):
         return self.acc.device
 
@@ -267,9 +277,9 @@ class Trainer(object):
         assert isinstance(state_dict, dict)
         self.tqdm_state_dict.update(state_dict)
 
-    # train_step(trainer, bat, bat_idx, global_step) -> loss
-    # val_step(trainer, bat, bat_idx, global_step) -> loss
-    # on_epoch_end(trainer, ep) -> None
+    # train_step(trainer: Trainer, bat, bat_idx, global_step) -> loss
+    # val_step(trainer: Trainer, bat, bat_idx, global_step) -> loss
+    # on_epoch_end(trainer: Trainer, ep) -> None
     def fit(self, train_step, val_step=None, on_epoch_end=None):
         self.train_global_step = 0
         self.val_global_step = 0
@@ -311,8 +321,8 @@ class Trainer(object):
             if self.config.auto_free:
                 self.acc.free_memory()
 
-    # test_step(trainer, bat, bat_idx, global_step) -> None
-    # on_test_end(trainer) -> None
+    # test_step(trainer: Trainer, bat, bat_idx, global_step) -> None
+    # on_test_end(trainer: Trainer) -> None
     def test(self, test_step, on_test_end=None):
         self.test_global_step = 0
         self._eval_state()

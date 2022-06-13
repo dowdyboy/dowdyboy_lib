@@ -230,7 +230,7 @@ class Trainer(object):
         else:
             return data_loader
 
-    # func(trainer) -> best_rec
+    # func(trainer: Trainer) -> best_rec
     def set_save_best_calc_func(self, func):
         self.save_best_calc_func = func
 
