@@ -1,30 +1,27 @@
 import paddle
-from paddle.io import DataLoader, DistributedBatchSampler
+from paddle.io import DataLoader, DistributedBatchSampler, Dataset
 from paddle.vision.models import vgg16
 from paddle.optimizer import Adam
 from paddle.optimizer.lr import StepDecay
 
 
+class DemoDataSet(Dataset):
+
+    def __init__(self):
+        super(DemoDataSet, self).__init__()
+
+    def __getitem__(self, item):
+        return paddle.randn([28, 28]), '/data/a.img'
+
+    def __len__(self):
+        return 100
+
+
 if __name__ == '__main__':
-    for x in enumerate([100, 101, 102, 103]):
-        print(x)
-    model = vgg16()
-    lr_schedule = StepDecay(learning_rate=0.01, step_size=10, gamma=0.9)
-    optimizer = Adam(learning_rate=lr_schedule, )
-    optimizer.clear_grad()
-    optimizer.step()
-    model.eval()
-    lr_schedule.step()
-    model.state_dict()
-    optimizer.state_dict()
-    lr_schedule.state_dict()
-    paddle.Tensor().item()
-    model.set_state_dict()
-    optimizer.set_state_dict()
-    lr_schedule.set_state_dict()
-    optimizer.get_lr()
-    paddle.Tensor()
-    DataLoader()
+    ld = DataLoader(DemoDataSet(), batch_size=4, shuffle=True)
+    for d in ld:
+        print(d)
+        break
     print()
 
 # import numpy as np

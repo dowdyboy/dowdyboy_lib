@@ -49,9 +49,17 @@ class MNIST(paddle.nn.Layer):
 
 
 def build_data():
-    train_dataset = paddle.vision.datasets.MNIST(mode='train', transform=transforms.ToTensor())
+    import os
+    data_path = './data/mnist'
+    train_dataset = paddle.vision.datasets.MNIST(
+        image_path=os.path.join(data_path, 'train-images-idx3-ubyte.gz'),
+        label_path=os.path.join(data_path, 'train-labels-idx1-ubyte.gz'),
+        mode='train', transform=transforms.ToTensor())
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    val_dataset = paddle.vision.datasets.MNIST(mode='test', transform=transforms.ToTensor())
+    val_dataset = paddle.vision.datasets.MNIST(
+        image_path=os.path.join(data_path, 't10k-images-idx3-ubyte.gz'),
+        label_path=os.path.join(data_path, 't10k-labels-idx1-ubyte.gz'),
+        mode='test', transform=transforms.ToTensor())
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     return train_loader, train_dataset, val_loader, val_dataset
 
@@ -152,5 +160,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
-    # paddle.distributed.spawn(main)
+    # main()
+    paddle.distributed.spawn(main)

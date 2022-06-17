@@ -252,7 +252,7 @@ class Trainer(object):
     def print(self, txt):
         warn(txt, acc=self.acc)
 
-    def log(self, value_dict, step=None):
+    def log(self, value_dict, step):
         assert isinstance(value_dict, dict)
         self.acc.log(value_dict, step)
 
