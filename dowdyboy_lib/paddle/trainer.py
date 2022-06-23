@@ -9,6 +9,7 @@ from .log import logging_conf, log
 
 import os
 import random
+import time
 import numpy as np
 import shutil
 import datetime
@@ -375,11 +376,12 @@ class Trainer(object):
                 self._eval_state()
                 tqdm_loader = tqdm(self.val_dataloader, total=len(self.val_dataloader), disable=not self.is_local_main_process())
                 for bat_idx, bat in enumerate(tqdm_loader):
-                    if self.config.mixed_precision == 'no':
-                        loss = val_step(self, bat, bat_idx, self.val_global_step)
-                    else:
-                        with paddle.amp.auto_cast(level='O1' if self.config.mixed_precision == 'fp16' else 'O2'):
+                    with paddle.no_grad():
+                        if self.config.mixed_precision == 'no':
                             loss = val_step(self, bat, bat_idx, self.val_global_step)
+                        else:
+                            with paddle.amp.auto_cast(level='O1' if self.config.mixed_precision == 'fp16' else 'O2'):
+                                loss = val_step(self, bat, bat_idx, self.val_global_step)
                     self.val_global_step += 1
                     self._update_tqdm_state(tqdm_loader, ep, loss)
             # if self.acc.is_local_main_process:
@@ -390,7 +392,11 @@ class Trainer(object):
                 self._gather_record()
 
             if self.config.enable_save_checkpoint and self.is_local_main_process():
-                self._save_checkpoint(ep)
+                time.sleep(random.random() * 5)
+                try:
+                    self._save_checkpoint(ep)
+                except:
+                    pass
 
             if on_epoch_end is not None:
                 on_epoch_end(self, ep)
@@ -406,11 +412,12 @@ class Trainer(object):
         self._eval_state()
         tqdm_loader = tqdm(self.test_dataloader, total=len(self.test_dataloader), disable=not self.is_local_main_process())
         for bat_idx, bat in enumerate(tqdm_loader):
-            if self.config.mixed_precision == 'no':
-                test_step(self, bat, bat_idx, self.test_global_step)
-            else:
-                with paddle.amp.auto_cast(level='O1' if self.config.mixed_precision == 'fp16' else 'O2'):
+            with paddle.no_grad():
+                if self.config.mixed_precision == 'no':
                     test_step(self, bat, bat_idx, self.test_global_step)
+                else:
+                    with paddle.amp.auto_cast(level='O1' if self.config.mixed_precision == 'fp16' else 'O2'):
+                        test_step(self, bat, bat_idx, self.test_global_step)
             self.test_global_step += 1
         if self.config.auto_gather_record:
             self._gather_record()

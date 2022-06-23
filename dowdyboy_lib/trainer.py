@@ -3,6 +3,8 @@ from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import set_seed
 from .log import logging_conf, warn
 
+import random
+import time
 import os
 import shutil
 import datetime
@@ -312,7 +314,11 @@ class Trainer(object):
                 self.records = self.acc.gather(self.records)
 
             if self.config.enable_save_checkpoint:
-                self._save_checkpoint(ep)
+                time.sleep(random.random() * 5)
+                try:
+                    self._save_checkpoint(ep)
+                except:
+                    pass
 
             if on_epoch_end is not None:
                 on_epoch_end(self, ep)
