@@ -69,10 +69,10 @@ class Trainer(object):
         self.train_dataloader = None
         self.val_dataloader = None
         self.test_dataloader = None
-        self.model_list = None
-        self.optimizer_list = None
-        self.lr_scheduler_list = None
-        self.component_list = None
+        self.model_list = []
+        self.optimizer_list = []
+        self.lr_scheduler_list = []
+        self.component_list = []
         self.records = dict()
         self.save_best_val = -9e9 if self.config.save_best_type == 'max' else 9e9
         self.save_best_calc_func = None
