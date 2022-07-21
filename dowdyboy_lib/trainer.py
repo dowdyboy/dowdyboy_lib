@@ -229,8 +229,8 @@ class Trainer(object):
     def get_optimizers(self):
         return self.optimizer_list, self.lr_scheduler_list
 
-    def backward(self, loss):
-        self.acc.backward(loss)
+    def backward(self, loss, **kv):
+        self.acc.backward(loss, **kv)
 
     def zero_grad(self, optimizer):
         optimizer.zero_grad()

@@ -296,12 +296,12 @@ class Trainer(object):
     def get_optimizers(self):
         return self.optimizer_list, self.lr_scheduler_list
 
-    def backward(self, loss):
+    def backward(self, loss, **kv):
         if self.config.mixed_precision == 'no':
-            loss.backward()
+            loss.backward(**kv)
         else:
             scale_loss = self.scaler.scale(loss)
-            scale_loss.backward()
+            scale_loss.backward(**kv)
 
     def zero_grad(self, optimizer):
         optimizer.clear_grad()
