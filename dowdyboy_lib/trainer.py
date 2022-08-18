@@ -140,6 +140,7 @@ class Trainer(object):
 
     def _save_checkpoint(self, ep):
         def _del_checkpoint(trainer: Trainer, label, ep_num):
+            time.sleep(random.random() * 3)
             if trainer.acc.is_local_main_process:
                 for dir_name in os.listdir(os.path.join(trainer.config.out_dir, 'checkpoint')):
                     if dir_name.startswith(label) and not dir_name.startswith(f'{label}_epoch_{ep_num}'):
@@ -314,10 +315,11 @@ class Trainer(object):
                 self.records = self.acc.gather(self.records)
 
             if self.config.enable_save_checkpoint:
-                time.sleep(random.random() * 5)
                 try:
+                    time.sleep(random.random() * 5)
                     self._save_checkpoint(ep)
                 except:
+                    self.print(f'[ERROR] save checkpoint failed : {ep}')
                     pass
 
             if on_epoch_end is not None:
