@@ -33,6 +33,8 @@ class TrainerConfig(object):
                  save_best_type='min',
                  save_best_rec='val_loss',
                  save_last=True,
+                 device=None,
+                 sync_bn=False,
                  seed=1024,
                  auto_optimize=True,
                  auto_schedule=True,
@@ -44,6 +46,7 @@ class TrainerConfig(object):
         assert save_best_type in ['min', 'max']
         assert log_with in ['visualdl']
         assert mixed_precision in ['no', 'fp16', 'fp16-2']
+        assert isinstance(device, str) or isinstance(device, list) or device is None
         self.name = name
         self.epoch = epoch
         self.out_dir = out_dir
@@ -58,6 +61,8 @@ class TrainerConfig(object):
         self.save_best_type = save_best_type
         self.save_best_rec = save_best_rec
         self.save_last = save_last
+        self.device = device
+        self.sync_bn = sync_bn
         self.seed = seed
         self.auto_optimize = auto_optimize
         self.auto_schedule = auto_schedule
@@ -85,11 +90,11 @@ class Trainer(object):
         self.val_global_step = 0
         self.test_global_step = 0
         self.tqdm_state_dict = dict()
-        self._init_seed()
         self._init_print()
         self._init_log()
         self._init_checkpoint()
         self._init_runtime()
+        self._init_seed()
 
     def _init_seed(self):
         seed = self.config.seed + paddle.distributed.get_rank()
@@ -119,6 +124,12 @@ class Trainer(object):
 
     def _init_runtime(self):
         assert self.config.mixed_precision in ['no', 'fp16', 'fp16-2']
+        assert isinstance(self.config.device, str) or isinstance(self.config.device, list) or self.config.device is None
+        if self.config.device is not None:
+            device = self.config.device
+            if isinstance(device, list):
+                device = ','.join(list(map(lambda x: str(x), device)))
+            os.environ['CUDA_VISIBLE_DEVICES'] = device
         if self.config.cpu:
             paddle.set_device('cpu')
         else:
@@ -250,6 +261,8 @@ class Trainer(object):
 
     def set_models(self, model_list: list):
         assert isinstance(model_list, list)
+        if self.config.sync_bn:
+            model_list = [paddle.nn.SyncBatchNorm.convert_sync_batchnorm(model) for model in model_list]
         if self.config.mixed_precision == 'fp16-2':
             self.model_list = paddle.amp.decorate(model_list, level='O2')
         else:

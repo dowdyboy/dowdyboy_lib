@@ -29,6 +29,8 @@ class TrainerConfig(object):
                  save_best_type='min',
                  save_best_rec='val_loss',
                  save_last=True,
+                 device=None,
+                 sync_bn=False,
                  seed=1024,
                  auto_optimize=True,
                  auto_schedule=True,
@@ -40,6 +42,7 @@ class TrainerConfig(object):
         assert save_best_type in ['min', 'max']
         assert mixed_precision in ['no', 'fp16', 'bf16']
         assert log_with in ['all', 'tensorboard', 'wandb', 'comet_ml']
+        assert isinstance(device, str) or isinstance(device, list) or device is None
         self.name = name
         self.epoch = epoch
         self.out_dir = out_dir
@@ -52,6 +55,8 @@ class TrainerConfig(object):
         self.save_best_type = save_best_type
         self.save_best_rec = save_best_rec
         self.save_last = save_last
+        self.device = device
+        self.sync_bn = sync_bn
         self.seed = seed
         self.auto_optimize = auto_optimize
         self.auto_schedule = auto_schedule
@@ -80,10 +85,10 @@ class Trainer(object):
         self.val_global_step = 0
         self.test_global_step = 0
         self.tqdm_state_dict = dict()
-        self._init_seed()
         self._init_print()
         self._init_log()
         self._init_checkpoint()
+        self._init_seed()
 
     def _init_log(self):
         self.acc.init_trackers(self.config.name, )
@@ -107,6 +112,12 @@ class Trainer(object):
         os.makedirs(os.path.join(self.config.out_dir, 'checkpoint'), exist_ok=True)
 
     def _get_acc(self) -> Accelerator:
+        assert isinstance(self.config.device, str) or isinstance(self.config.device, list) or self.config.device is None
+        if self.config.device is not None:
+            device = self.config.device
+            if isinstance(device, list):
+                device = ','.join(list(map(lambda x: str(x), device)))
+            os.environ['CUDA_VISIBLE_DEVICES'] = device
         ddp = DistributedDataParallelKwargs()
         ddp.find_unused_parameters = self.config.find_unused_parameters
         return Accelerator(
@@ -189,6 +200,8 @@ class Trainer(object):
 
     def set_models(self, model_list: list):
         assert isinstance(model_list, list)
+        if self.config.sync_bn:
+            model_list = [torch.nn.SyncBatchNorm.convert_sync_batchnorm(model) for model in model_list]
         self.model_list = [self.acc.prepare(model) for model in model_list]
 
     def get_models(self):
