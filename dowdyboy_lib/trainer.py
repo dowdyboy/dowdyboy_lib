@@ -20,6 +20,7 @@ class TrainerConfig(object):
                  name='default',
                  epoch=10,
                  out_dir='./output/',
+                 disable_tqdm=False,
                  mixed_precision='no',
                  cpu=False,
                  log_with='tensorboard',
@@ -46,6 +47,7 @@ class TrainerConfig(object):
         self.name = name
         self.epoch = epoch
         self.out_dir = out_dir
+        self.disable_tqdm = disable_tqdm
         self.mixed_precision = mixed_precision
         self.cpu = cpu
         self.log_with = log_with
@@ -302,7 +304,7 @@ class Trainer(object):
         for ep in range(1, self.config.epoch + 1):
             self.print(f'======= epoch {ep} begin ========')
             self._train_state()
-            tqdm_loader = tqdm(self.train_dataloader, total=len(self.train_dataloader), disable=not self.acc.is_local_main_process)
+            tqdm_loader = tqdm(self.train_dataloader, total=len(self.train_dataloader), disable=not self.acc.is_local_main_process or self.config.disable_tqdm)
             for bat_idx, bat in enumerate(tqdm_loader):
                 if self.config.auto_optimize:
                     self._zero_grad()
@@ -314,7 +316,7 @@ class Trainer(object):
                 self._update_tqdm_state(tqdm_loader, ep, loss)
             if val_step is not None:
                 self._eval_state()
-                tqdm_loader = tqdm(self.val_dataloader, total=len(self.val_dataloader), disable=not self.acc.is_local_main_process)
+                tqdm_loader = tqdm(self.val_dataloader, total=len(self.val_dataloader), disable=not self.acc.is_local_main_process or self.config.disable_tqdm)
                 for bat_idx, bat in enumerate(tqdm_loader):
                     with torch.no_grad():
                         loss = val_step(self, bat, bat_idx, self.val_global_step)
@@ -347,7 +349,7 @@ class Trainer(object):
     def test(self, test_step, on_test_end=None):
         self.test_global_step = 0
         self._eval_state()
-        tqdm_loader = tqdm(self.test_dataloader, total=len(self.test_dataloader), disable=not self.acc.is_local_main_process)
+        tqdm_loader = tqdm(self.test_dataloader, total=len(self.test_dataloader), disable=not self.acc.is_local_main_process or self.config.disable_tqdm)
         for bat_idx, bat in enumerate(tqdm_loader):
             with torch.no_grad():
                 test_step(self, bat, bat_idx, self.test_global_step)

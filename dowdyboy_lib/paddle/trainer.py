@@ -22,6 +22,7 @@ class TrainerConfig(object):
                  name='default',
                  epoch=10,
                  out_dir='./output/',
+                 disable_tqdm=False,
                  mixed_precision='no',
                  init_loss_scaling=2.**15,
                  cpu=False,
@@ -41,7 +42,7 @@ class TrainerConfig(object):
                  auto_free=False,
                  # auto_gather_record=True,  # 一次变量重建（清空）后，只能调用一次gather，不然会卡死
                  # auto_clear_record=True,
-                 # find_unused_parameters=False,
+                 find_unused_parameters=False,
                  ):
         assert save_best_type in ['min', 'max']
         assert log_with in ['visualdl']
@@ -50,6 +51,7 @@ class TrainerConfig(object):
         self.name = name
         self.epoch = epoch
         self.out_dir = out_dir
+        self.disable_tqdm = disable_tqdm
         self.mixed_precision = mixed_precision
         self.init_loss_scaling = init_loss_scaling
         self.cpu = cpu
@@ -69,7 +71,7 @@ class TrainerConfig(object):
         self.auto_free = auto_free
         self.auto_gather_record = True
         self.auto_clear_record = True
-        # self.find_unused_parameters = find_unused_parameters
+        self.find_unused_parameters = find_unused_parameters
 
 
 class Trainer(object):
@@ -135,6 +137,8 @@ class Trainer(object):
         else:
             if self.config.multi_gpu:
                 strategy = fleet.DistributedStrategy()
+                if self.config.find_unused_parameters:
+                    strategy.find_unused_parameters = True
                 fleet.init(is_collective=True, strategy=strategy)
             else:
                 paddle.set_device('gpu:0')
@@ -372,7 +376,7 @@ class Trainer(object):
         for ep in range(1, self.config.epoch + 1):
             self.print(f'======= epoch {ep} begin ========')
             self._train_state()
-            tqdm_loader = tqdm(self.train_dataloader, total=len(self.train_dataloader), disable=not self.is_local_main_process())
+            tqdm_loader = tqdm(self.train_dataloader, total=len(self.train_dataloader), disable=not self.is_local_main_process() or self.config.disable_tqdm)
             for bat_idx, bat in enumerate(tqdm_loader):
                 if self.config.auto_optimize:
                     self._zero_grad()
@@ -388,7 +392,7 @@ class Trainer(object):
                 self._update_tqdm_state(tqdm_loader, ep, loss)
             if val_step is not None:
                 self._eval_state()
-                tqdm_loader = tqdm(self.val_dataloader, total=len(self.val_dataloader), disable=not self.is_local_main_process())
+                tqdm_loader = tqdm(self.val_dataloader, total=len(self.val_dataloader), disable=not self.is_local_main_process() or self.config.disable_tqdm)
                 for bat_idx, bat in enumerate(tqdm_loader):
                     with paddle.no_grad():
                         if self.config.mixed_precision == 'no':
@@ -425,7 +429,7 @@ class Trainer(object):
     def test(self, test_step, on_test_end=None):
         self.test_global_step = 0
         self._eval_state()
-        tqdm_loader = tqdm(self.test_dataloader, total=len(self.test_dataloader), disable=not self.is_local_main_process())
+        tqdm_loader = tqdm(self.test_dataloader, total=len(self.test_dataloader), disable=not self.is_local_main_process() or self.config.disable_tqdm)
         for bat_idx, bat in enumerate(tqdm_loader):
             with paddle.no_grad():
                 if self.config.mixed_precision == 'no':
