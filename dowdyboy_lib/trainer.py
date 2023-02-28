@@ -295,8 +295,8 @@ class Trainer(object):
         assert isinstance(state_dict, dict)
         self.tqdm_state_dict.update(state_dict)
 
-    # train_step(trainer: Trainer, bat, bat_idx, global_step) -> loss
-    # val_step(trainer: Trainer, bat, bat_idx, global_step) -> loss
+    # train_step(trainer: Trainer, bat, bat_idx, global_step, ep) -> loss
+    # val_step(trainer: Trainer, bat, bat_idx, global_step, ep) -> loss
     # on_epoch_end(trainer: Trainer, ep) -> None
     def fit(self, train_step, val_step=None, on_epoch_end=None):
         self.train_global_step = 0
@@ -308,7 +308,7 @@ class Trainer(object):
             for bat_idx, bat in enumerate(tqdm_loader):
                 if self.config.auto_optimize:
                     self._zero_grad()
-                loss = train_step(self, bat, bat_idx, self.train_global_step)
+                loss = train_step(self, bat, bat_idx, self.train_global_step, ep)
                 self.train_global_step += 1
                 if self.config.auto_optimize:
                     self.acc.backward(loss)
@@ -319,7 +319,7 @@ class Trainer(object):
                 tqdm_loader = tqdm(self.val_dataloader, total=len(self.val_dataloader), disable=not self.acc.is_local_main_process or self.config.disable_tqdm)
                 for bat_idx, bat in enumerate(tqdm_loader):
                     with torch.no_grad():
-                        loss = val_step(self, bat, bat_idx, self.val_global_step)
+                        loss = val_step(self, bat, bat_idx, self.val_global_step, ep)
                         self.val_global_step += 1
                     self._update_tqdm_state(tqdm_loader, ep, loss)
             # if self.acc.is_local_main_process:

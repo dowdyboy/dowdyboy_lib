@@ -367,8 +367,8 @@ class Trainer(object):
         assert isinstance(state_dict, dict)
         self.tqdm_state_dict.update(state_dict)
 
-    # train_step(trainer: Trainer, bat, bat_idx, global_step) -> loss
-    # val_step(trainer: Trainer, bat, bat_idx, global_step) -> loss
+    # train_step(trainer: Trainer, bat, bat_idx, global_step, ep) -> loss
+    # val_step(trainer: Trainer, bat, bat_idx, global_step, ep) -> loss
     # on_epoch_end(trainer: Trainer, ep) -> None
     def fit(self, train_step, val_step=None, on_epoch_end=None):
         self.train_global_step = 0
@@ -381,10 +381,10 @@ class Trainer(object):
                 if self.config.auto_optimize:
                     self._zero_grad()
                 if self.config.mixed_precision == 'no':
-                    loss = train_step(self, bat, bat_idx, self.train_global_step)
+                    loss = train_step(self, bat, bat_idx, self.train_global_step, ep)
                 else:
                     with paddle.amp.auto_cast(level='O1' if self.config.mixed_precision == 'fp16' else 'O2'):
-                        loss = train_step(self, bat, bat_idx, self.train_global_step)
+                        loss = train_step(self, bat, bat_idx, self.train_global_step, ep)
                 self.train_global_step += 1
                 if self.config.auto_optimize:
                     self.backward(loss)
@@ -396,10 +396,10 @@ class Trainer(object):
                 for bat_idx, bat in enumerate(tqdm_loader):
                     with paddle.no_grad():
                         if self.config.mixed_precision == 'no':
-                            loss = val_step(self, bat, bat_idx, self.val_global_step)
+                            loss = val_step(self, bat, bat_idx, self.val_global_step, ep)
                         else:
                             with paddle.amp.auto_cast(level='O1' if self.config.mixed_precision == 'fp16' else 'O2'):
-                                loss = val_step(self, bat, bat_idx, self.val_global_step)
+                                loss = val_step(self, bat, bat_idx, self.val_global_step, ep)
                     self.val_global_step += 1
                     self._update_tqdm_state(tqdm_loader, ep, loss)
             # if self.acc.is_local_main_process:
