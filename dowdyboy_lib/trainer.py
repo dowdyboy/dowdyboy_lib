@@ -25,6 +25,7 @@ class TrainerConfig(object):
                  cpu=False,
                  log_with='tensorboard',
                  enable_save_checkpoint=True,
+                 val_interval=1,
                  save_interval=1,
                  save_best=False,
                  save_best_type='min',
@@ -52,6 +53,7 @@ class TrainerConfig(object):
         self.cpu = cpu
         self.log_with = log_with
         self.enable_save_checkpoint = enable_save_checkpoint
+        self.val_interval = val_interval
         self.save_interval = save_interval
         self.save_best = save_best
         self.save_best_type = save_best_type
@@ -163,7 +165,7 @@ class Trainer(object):
         if self.config.save_last:
             self.acc.save_state(os.path.join(self.config.out_dir, 'checkpoint', f'last_epoch_{ep}'))
             _del_checkpoint(self, 'last', ep)
-        if self.config.save_best:
+        if self.config.save_best and ep % self.config.val_interval == 0:
             if self.save_best_calc_func is None:
                 rec_dict = self.get_records()
                 best_rec = rec_dict[self.config.save_best_rec]
@@ -314,7 +316,7 @@ class Trainer(object):
                     self.acc.backward(loss)
                     self._step()
                 self._update_tqdm_state(tqdm_loader, ep, loss)
-            if val_step is not None:
+            if val_step is not None and ep % self.config.val_interval == 0:
                 self._eval_state()
                 tqdm_loader = tqdm(self.val_dataloader, total=len(self.val_dataloader), disable=not self.acc.is_local_main_process or self.config.disable_tqdm)
                 for bat_idx, bat in enumerate(tqdm_loader):
