@@ -1,5 +1,6 @@
 import paddle
-
+import os
+import shutil
 
 @paddle.no_grad()
 def print_model(model, input_size, custom_ops=None, ):
@@ -48,3 +49,49 @@ def unfrozen_layer(layer):
 #                 bound = 1 / math.sqrt(fan_in)
 #                 uniform_(m.bias, -bound, bound)
 #     model.apply(reset_func)
+
+
+def save_checkpoint(step, dir_path, model_list, optimizer_list=None, max_keep_num=10):
+    if not os.path.isdir(dir_path):
+        os.makedirs(dir_path, exist_ok=True)
+    sub_dir_names = [d for d in os.listdir(dir_path) if os.path.isdir(os.path.join(dir_path, d))]
+    sub_dir_names.sort(key=lambda x: os.path.getctime(os.path.join(dir_path, x)))
+    sub_dir_names = list(filter(lambda x: x.startswith('chk_step_'), sub_dir_names))
+    if len(sub_dir_names) >= max_keep_num:
+        for sub_dir_name in sub_dir_names[:len(sub_dir_names) - max_keep_num + 1]:
+            shutil.rmtree(os.path.join(dir_path, sub_dir_name))
+    saved_dir_path = os.path.join(dir_path, f'chk_step_{step}')
+    if not os.path.isdir(saved_dir_path):
+        os.makedirs(saved_dir_path, exist_ok=True)
+    for i, model in enumerate(model_list):
+        paddle.save(model.state_dict(), os.path.join(saved_dir_path, f'model_{i}.pdparams'))
+    if optimizer_list is not None:
+        for i, optimizer in enumerate(optimizer_list):
+            paddle.save(optimizer.state_dict(), os.path.join(saved_dir_path, f'optimizer_{i}.pdopt'))
+
+
+def save_checkpoint_unique(step, dir_path, model_list, optimizer_list=None, label='unique'):
+    if not os.path.isdir(dir_path):
+        os.makedirs(dir_path, exist_ok=True)
+    sub_dir_names = [d for d in os.listdir(dir_path) if os.path.isdir(os.path.join(dir_path, d))]
+    sub_dir_names = list(filter(lambda x: x.startswith(f'chk_{label}_'), sub_dir_names))
+    for dir_name in sub_dir_names:
+        shutil.rmtree(os.path.join(dir_path, dir_name))
+    saved_dir_path = os.path.join(dir_path, f'chk_{label}_step_{step}')
+    if not os.path.isdir(saved_dir_path):
+        os.makedirs(saved_dir_path, exist_ok=True)
+    for i, model in enumerate(model_list):
+        paddle.save(model.state_dict(), os.path.join(saved_dir_path, f'model_{i}.pdparams'))
+    if optimizer_list is not None:
+        for i, optimizer in enumerate(optimizer_list):
+            paddle.save(optimizer.state_dict(), os.path.join(saved_dir_path, f'optimizer_{i}.pdopt'))
+
+
+def load_checkpoint(resume_dir, model_list, optimizer_list=None, ):
+    model_chk_names = list(sorted(list(filter(lambda x: x.startswith('model'), os.listdir(resume_dir)))))
+    for idx, filename in enumerate(model_chk_names):
+        model_list[idx].set_state_dict(paddle.load(os.path.join(resume_dir, filename)))
+    if optimizer_list is not None:
+        optimizer_chk_names = list(sorted(list(filter(lambda x: x.startswith('optimizer'), os.listdir(resume_dir)))))
+        for idx, filename in enumerate(optimizer_chk_names):
+            optimizer_list[idx].set_state_dict(paddle.load(os.path.join(resume_dir, filename)))

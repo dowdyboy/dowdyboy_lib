@@ -1,5 +1,8 @@
 from torchinfo import summary
 from ptflops.flops_counter import get_model_complexity_info
+import torch
+import os
+import shutil
 
 
 def frozen_module(module):
@@ -21,4 +24,50 @@ def module_cost(model, in_size):
     flops, params = get_model_complexity_info(model, in_size, as_strings=False, print_per_layer_stat=True)
     print('total params : ' + str(params / 1e6) + 'M')
     print('Flops: ' + str(flops / 1e9) + 'G')
+
+
+def save_checkpoint(step, dir_path, model_list, optimizer_list=None, max_keep_num=10):
+    if not os.path.isdir(dir_path):
+        os.makedirs(dir_path, exist_ok=True)
+    sub_dir_names = [d for d in os.listdir(dir_path) if os.path.isdir(os.path.join(dir_path, d))]
+    sub_dir_names.sort(key=lambda x: os.path.getctime(os.path.join(dir_path, x)))
+    sub_dir_names = list(filter(lambda x: x.startswith('chk_step_'), sub_dir_names))
+    if len(sub_dir_names) >= max_keep_num:
+        for sub_dir_name in sub_dir_names[:len(sub_dir_names) - max_keep_num + 1]:
+            shutil.rmtree(os.path.join(dir_path, sub_dir_name))
+    saved_dir_path = os.path.join(dir_path, f'chk_step_{step}')
+    if not os.path.isdir(saved_dir_path):
+        os.makedirs(saved_dir_path, exist_ok=True)
+    for i, model in enumerate(model_list):
+        torch.save(model.state_dict(), os.path.join(saved_dir_path, f'model_{i}.pt'))
+    if optimizer_list is not None:
+        for i, optimizer in enumerate(optimizer_list):
+            torch.save(optimizer.state_dict(), os.path.join(saved_dir_path, f'optimizer_{i}.pt'))
+
+
+def save_checkpoint_unique(step, dir_path, model_list, optimizer_list=None, label='unique'):
+    if not os.path.isdir(dir_path):
+        os.makedirs(dir_path, exist_ok=True)
+    sub_dir_names = [d for d in os.listdir(dir_path) if os.path.isdir(os.path.join(dir_path, d))]
+    sub_dir_names = list(filter(lambda x: x.startswith(f'chk_{label}_'), sub_dir_names))
+    for dir_name in sub_dir_names:
+        shutil.rmtree(os.path.join(dir_path, dir_name))
+    saved_dir_path = os.path.join(dir_path, f'chk_{label}_step_{step}')
+    if not os.path.isdir(saved_dir_path):
+        os.makedirs(saved_dir_path, exist_ok=True)
+    for i, model in enumerate(model_list):
+        torch.save(model.state_dict(), os.path.join(saved_dir_path, f'model_{i}.pt'))
+    if optimizer_list is not None:
+        for i, optimizer in enumerate(optimizer_list):
+            torch.save(optimizer.state_dict(), os.path.join(saved_dir_path, f'optimizer_{i}.pt'))
+
+
+def load_checkpoint(resume_dir, model_list, optimizer_list=None, ):
+    model_chk_names = list(sorted(list(filter(lambda x: x.startswith('model'), os.listdir(resume_dir)))))
+    for idx, filename in enumerate(model_chk_names):
+        model_list[idx].load_state_dict(torch.load(os.path.join(resume_dir, filename)))
+    if optimizer_list is not None:
+        optimizer_chk_names = list(sorted(list(filter(lambda x: x.startswith('optimizer'), os.listdir(resume_dir)))))
+        for idx, filename in enumerate(optimizer_chk_names):
+            optimizer_list[idx].load_state_dict(torch.load(os.path.join(resume_dir, filename)))
 

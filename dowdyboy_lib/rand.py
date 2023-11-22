@@ -11,7 +11,7 @@ def set_seed(seed_value):
     torch.manual_seed(seed_value)     # 为CPU设置随机种子
     torch.cuda.manual_seed(seed_value)      # 为当前GPU设置随机种子（只用一块GPU）
     torch.cuda.manual_seed_all(seed_value)   # 为所有GPU设置随机种子（多块GPU）
-    torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.deterministic = True  # 可能导致训练速度变慢很多
 
 
 def wheel_rand_index(weight_list):

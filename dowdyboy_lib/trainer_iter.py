@@ -10,27 +10,24 @@ import shutil
 import datetime
 from tqdm import tqdm
 
-# TODO:
-# 2. save best 策略函数优化
-
 
 class TrainerConfig(object):
 
     def __init__(self,
                  name='default',
-                 epoch=10,
+                 iter_count=100,
                  out_dir='./output/',
                  disable_tqdm=False,
                  mixed_precision='no',
                  cpu=False,
                  log_with='tensorboard',
                  enable_save_checkpoint=True,
-                 val_interval=1,
-                 save_interval=1,
+                 val_interval=100,
+                 save_interval=100,
                  save_best=False,
                  save_best_type='min',
                  save_best_rec='val_loss',
-                 save_last=True,
+                 save_last=False,
                  device=None,
                  sync_bn=False,
                  seed=1024,
@@ -46,7 +43,7 @@ class TrainerConfig(object):
         assert log_with in ['all', 'tensorboard', 'wandb', 'comet_ml']
         assert isinstance(device, str) or isinstance(device, list) or device is None
         self.name = name
-        self.epoch = epoch
+        self.iter_count = iter_count
         self.out_dir = out_dir
         self.disable_tqdm = disable_tqdm
         self.mixed_precision = mixed_precision
@@ -75,7 +72,8 @@ class Trainer(object):
     def __init__(self, config: TrainerConfig):
         self.config = config
         self.acc = self._get_acc()
-        self.train_dataloader = None
+        self.train_dataloader = []
+        self.train_iterator = []
         self.val_dataloader = None
         self.test_dataloader = None
         self.model_list = []
@@ -153,19 +151,20 @@ class Trainer(object):
             if lr_schedule is not None:
                 lr_schedule.step()
 
-    def _save_checkpoint(self, ep):
-        def _del_checkpoint(trainer: Trainer, label, ep_num):
-            time.sleep(random.random() * 3)
+    def _save_checkpoint(self, step, have_val, do_save_regular, do_save_best):
+        def _del_checkpoint(trainer: Trainer, label, step_num):
+            # time.sleep(random.random() * 3)
             if trainer.acc.is_local_main_process:
                 for dir_name in os.listdir(os.path.join(trainer.config.out_dir, 'checkpoint')):
-                    if dir_name.startswith(label) and not dir_name.startswith(f'{label}_epoch_{ep_num}'):
+                    if dir_name.startswith(label) and not dir_name.startswith(f'{label}_iter_{step_num}'):
                         shutil.rmtree(os.path.join(trainer.config.out_dir, 'checkpoint', dir_name))
-        if ep % self.config.save_interval == 0:
-            self.acc.save_state(os.path.join(self.config.out_dir, 'checkpoint', f'epoch_{ep}'))
-        if self.config.save_last:
-            self.acc.save_state(os.path.join(self.config.out_dir, 'checkpoint', f'last_epoch_{ep}'))
-            _del_checkpoint(self, 'last', ep)
-        if self.config.save_best and ep % self.config.val_interval == 0:
+        if do_save_regular:
+            if step % self.config.save_interval == 0:
+                self.acc.save_state(os.path.join(self.config.out_dir, 'checkpoint', f'iter_{step}'))
+            if self.config.save_last:
+                self.acc.save_state(os.path.join(self.config.out_dir, 'checkpoint', f'last_iter_{step}'))
+                _del_checkpoint(self, 'last', step)
+        if self.config.save_best and step % self.config.val_interval == 0 and have_val and do_save_best:
             if self.save_best_calc_func is None:
                 rec_dict = self.get_records()
                 best_rec = rec_dict[self.config.save_best_rec]
@@ -174,24 +173,21 @@ class Trainer(object):
                 best_rec = self.save_best_calc_func(self)
             if (self.config.save_best_type == 'min' and best_rec < self.save_best_val) \
                     or (self.config.save_best_type == 'max' and best_rec > self.save_best_val):
-                self.acc.save_state(os.path.join(self.config.out_dir, 'checkpoint', f'best_epoch_{ep}'))
+                self.acc.save_state(os.path.join(self.config.out_dir, 'checkpoint', f'best_iter_{step}'))
                 self.save_best_val = best_rec
-                _del_checkpoint(self, 'best', ep)
-
-    def _update_tqdm_state(self, tqdm_loader, ep, loss):
-        self.tqdm_state_dict.update(dict(loss=loss.item() if hasattr(loss, 'item') else loss))
-        tqdm_loader.set_description(f'Epoch [{ep}/{self.config.epoch}]')
-        tqdm_loader.set_postfix(
-            **self.tqdm_state_dict
-        )
-        self.tqdm_state_dict.clear()
+                _del_checkpoint(self, 'best', step)
 
     # func(trainer: Trainer) -> best_rec
     def set_save_best_calc_func(self, func):
         self.save_best_calc_func = func
 
     def set_train_dataloader(self, train_loader):
-        self.train_dataloader = self.acc.prepare(train_loader)
+        if isinstance(train_loader, list):
+            self.train_dataloader = [self.acc.prepare(loader) for loader in train_loader]
+            self.train_iterator = [None for loader in train_loader]
+        else:
+            self.train_dataloader = [self.acc.prepare(train_loader)]
+            self.train_iterator = [None]
 
     def set_val_dataloader(self, val_loader):
         self.val_dataloader = self.acc.prepare(val_loader)
@@ -297,65 +293,84 @@ class Trainer(object):
         assert isinstance(state_dict, dict)
         self.tqdm_state_dict.update(state_dict)
 
-    # train_step(trainer: Trainer, bat, bat_idx, global_step, ep) -> loss
-    # val_step(trainer: Trainer, bat, bat_idx, global_step, ep) -> loss
-    # on_epoch_end(trainer: Trainer, ep) -> None
-    def fit(self, train_step, val_step=None, on_epoch_end=None):
+    def generate_train_data(self, step):
+        ret = []
+        for i in range(len(self.train_dataloader)):
+            loader = self.train_dataloader[i]
+            if (step - 1) % len(loader) == 0:
+                self.train_iterator[i] = iter(loader)
+        for i in range(len(self.train_iterator)):
+            iterator = self.train_iterator[i]
+            ret.append(
+                next(iterator)
+            )
+        return ret
+
+    # train_step(trainer: Trainer, bat_list, global_step, step) -> loss
+    # val_step(trainer: Trainer, bat, global_step, step) -> loss
+    # on_val_end(trainer: Trainer, step) -> None
+    def fit(self, train_step, val_step=None, on_val_end=None):
         self.train_global_step = 0
         self.val_global_step = 0
-        for ep in range(1, self.config.epoch + 1):
-            self.print(f'======= epoch {ep} begin ========')
-            self._train_state()
-            tqdm_loader = tqdm(self.train_dataloader, total=len(self.train_dataloader), disable=not self.acc.is_local_main_process or self.config.disable_tqdm)
-            for bat_idx, bat in enumerate(tqdm_loader):
-                if self.config.auto_optimize:
-                    self._zero_grad()
-                loss = train_step(self, bat, bat_idx, self.train_global_step, ep)
-                self.train_global_step += 1
-                if self.config.auto_optimize:
-                    self.acc.backward(loss)
-                    self._step()
-                self._update_tqdm_state(tqdm_loader, ep, loss)
-            if val_step is not None and ep % self.config.val_interval == 0:
-                self._eval_state()
-                tqdm_loader = tqdm(self.val_dataloader, total=len(self.val_dataloader), disable=not self.acc.is_local_main_process or self.config.disable_tqdm)
-                for bat_idx, bat in enumerate(tqdm_loader):
-                    with torch.no_grad():
-                        loss = val_step(self, bat, bat_idx, self.val_global_step, ep)
-                        self.val_global_step += 1
-                    self._update_tqdm_state(tqdm_loader, ep, loss)
+        self._train_state()
+        for step in range(1, self.config.iter_count + 1):
+
+            bat_list = self.generate_train_data(step)
+            if self.config.auto_optimize:
+                self._zero_grad()
+            loss = train_step(self, bat_list, self.train_global_step, step)
+            self.train_global_step += 1
+            if self.config.auto_optimize:
+                self.acc.backward(loss)
+                self._step()
+
+            if step % self.config.val_interval == 0:
+                if val_step is not None:
+                    self._eval_state()
+                    for bat_idx, bat in enumerate(self.val_dataloader):
+                        with torch.no_grad():
+                            loss = val_step(self, bat, self.val_global_step, step)
+                            self.val_global_step += 1
+                    self._train_state()
+
+                if self.config.auto_gather_record:
+                    self.records = self.acc.gather(self.records)
+                if on_val_end is not None:
+                    on_val_end(self, step)
+                if self.config.enable_save_checkpoint:
+                    try:
+                        # time.sleep(random.random() * 5)
+                        self._save_checkpoint(step, on_val_end is not None,
+                                              do_save_regular=False, do_save_best=True)
+                    except:
+                        self.print(f'[ERROR] save checkpoint failed : {step}')
+                        pass
+                if self.config.auto_clear_record:
+                    self.records.clear()
+                if self.config.auto_free:
+                    self.acc.free_memory()
+
             # if self.acc.is_local_main_process:
             if self.config.auto_schedule:
                 self._schedule_step()
 
-            if self.config.auto_gather_record:
-                self.records = self.acc.gather(self.records)
-
-            if on_epoch_end is not None:
-                on_epoch_end(self, ep)
-
             if self.config.enable_save_checkpoint:
                 try:
-                    time.sleep(random.random() * 5)
-                    self._save_checkpoint(ep)
+                    # time.sleep(random.random() * 5)
+                    self._save_checkpoint(step, on_val_end is not None,
+                                          do_save_regular=True, do_save_best=False)
                 except:
-                    self.print(f'[ERROR] save checkpoint failed : {ep}')
+                    self.print(f'[ERROR] save checkpoint failed : {step}')
                     pass
 
-            if self.config.auto_clear_record:
-                self.records.clear()
-            if self.config.auto_free:
-                self.acc.free_memory()
-
-    # test_step(trainer: Trainer, bat, bat_idx, global_step) -> None
+    # test_step(trainer: Trainer, bat, global_step, step) -> None
     # on_test_end(trainer: Trainer) -> None
     def test(self, test_step, on_test_end=None):
         self.test_global_step = 0
         self._eval_state()
-        tqdm_loader = tqdm(self.test_dataloader, total=len(self.test_dataloader), disable=not self.acc.is_local_main_process or self.config.disable_tqdm)
-        for bat_idx, bat in enumerate(tqdm_loader):
+        for bat_idx, bat in enumerate(self.test_dataloader):
             with torch.no_grad():
-                test_step(self, bat, bat_idx, self.test_global_step)
+                test_step(self, bat, self.test_global_step, bat_idx+1)
                 self.test_global_step += 1
         if self.config.auto_gather_record:
             self.records = self.acc.gather(self.records)
